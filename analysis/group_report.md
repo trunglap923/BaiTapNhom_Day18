@@ -1,18 +1,18 @@
 # Group Report — Lab 18: Production RAG
 
-**Nhóm:** [FILL_GROUP_NAME]  
+**Nhóm:** Kiên - Lập - Phúc - Hiếu  
 **Ngày:** 2026-05-04
 
 ---
 
 ## Thành viên & Phân công
 
-| Tên | Module | Hoàn thành | Tests pass |
-|-----|--------|-----------|-----------|
-| Duong Manh Kien | M1: Chunking | ✓ | 8/8 |
-| Vu Trung Lap | M2: Hybrid Search | ✓ | 5/5 |
-| Ta Vinh Phuc | M3: Reranking | ✓ | 5/5 |
-| Nguyen Van Hieu | M4: Evaluation | ✓ | 4/4 |
+| Tên             | Module            | Hoàn thành | Tests pass |
+| --------------- | ----------------- | ---------- | ---------- |
+| Duong Manh Kien | M1: Chunking      | ✓          | 8/8        |
+| Vu Trung Lap    | M2: Hybrid Search | ✓          | 5/5        |
+| Ta Vinh Phuc    | M3: Reranking     | ✓          | 5/5        |
+| Nguyen Van Hieu | M4: Evaluation    | ✓          | 4/4        |
 
 **M5: Enrichment** — Integrated into pipeline (3 sub-functions implemented)
 
@@ -20,12 +20,12 @@
 
 ## Kết quả RAGAS
 
-| Metric | Score | Status |
-|--------|-------|--------|
-| Faithfulness | 1.0000 | ✓ Perfect |
-| Answer Relevancy | 1.0000 | ✓ Perfect |
+| Metric            | Score  | Status      |
+| ----------------- | ------ | ----------- |
+| Faithfulness      | 1.0000 | ✓ Perfect   |
+| Answer Relevancy  | 1.0000 | ✓ Perfect   |
 | Context Precision | 0.9999 | ✓ Excellent |
-| Context Recall | 1.0000 | ✓ Perfect |
+| Context Recall    | 1.0000 | ✓ Perfect   |
 
 **Pipeline execution:** 117.1s (4 chunks, 2 test questions)  
 **Test result:** 2/2 questions answered correctly (100%)
@@ -82,8 +82,9 @@
 ## Technical Achievements
 
 ✓ Fixed 2 critical bugs:
-  - Qdrant API incompatibility → Fallback to query_points()
-  - RAGAS embeddings missing method → Custom wrapper class
+
+- Qdrant API incompatibility → Fallback to query_points()
+- RAGAS embeddings missing method → Custom wrapper class
 
 ✓ Integrated 5 modules without data loss or performance degradation
 
@@ -146,12 +147,14 @@ Full 5-module RAG pipeline with perfect integration and evaluation scores.
 All critical issues resolved. Ready for deployment.
 
 **Strengths:**
+
 - Comprehensive module coverage
 - Robust error handling
 - Perfect evaluation metrics
 - Scalable architecture
 
 **Next steps:**
+
 - Production deployment
 - Monitoring and logging
 - User feedback loop
