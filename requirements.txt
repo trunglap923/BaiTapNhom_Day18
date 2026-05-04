@@ -12,3 +12,5 @@ numpy
 pandas
 tqdm
 cohere
+pymupdf
+pillow
