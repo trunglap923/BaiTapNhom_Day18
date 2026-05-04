@@ -80,7 +80,13 @@ class BM25Search:
 class DenseSearch:
     def __init__(self):
         from qdrant_client import QdrantClient
-        self.client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+        try:
+            self.client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+            self.client.get_collections()
+            print("  ✓ Connected to Qdrant server")
+        except Exception:
+            print("  ⚠ Qdrant server not available, using in-memory mode")
+            self.client = QdrantClient(":memory:")
         self._encoder = None
 
     def _get_encoder(self):
@@ -114,13 +120,21 @@ class DenseSearch:
 
     def search(self, query: str, top_k: int = DENSE_TOP_K, collection: str = COLLECTION_NAME) -> list[SearchResult]:
         """Tìm kiếm sử dụng Dense Vector."""
+        from qdrant_client.models import PointStruct
         query_vector = self._get_encoder().encode(query).tolist()
-        hits = self.client.search(
-            collection_name=collection,
-            query_vector=query_vector,
-            limit=top_k
-        )
-        
+        try:
+            hits = self.client.search(
+                collection_name=collection,
+                query_vector=query_vector,
+                limit=top_k
+            )
+        except AttributeError:
+            hits = self.client.query_points(
+                collection_name=collection,
+                query=query_vector,
+                limit=top_k
+            ).points
+
         return [
             SearchResult(
                 text=hit.payload["text"],
@@ -172,8 +186,12 @@ class HybridSearch:
 
     def search(self, query: str, top_k: int = HYBRID_TOP_K) -> list[SearchResult]:
         bm25_results = self.bm25.search(query, top_k=BM25_TOP_K)
-        dense_results = self.dense.search(query, top_k=DENSE_TOP_K)
-        return reciprocal_rank_fusion([bm25_results, dense_results], top_k=top_k)
+        try:
+            dense_results = self.dense.search(query, top_k=DENSE_TOP_K)
+            return reciprocal_rank_fusion([bm25_results, dense_results], top_k=top_k)
+        except Exception as e:
+            print(f"  ⚠ Dense search failed ({e}), using BM25 only")
+            return bm25_results[:top_k]
 
 
 if __name__ == "__main__":

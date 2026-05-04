@@ -43,18 +43,43 @@ def evaluate_ragas(questions: list[str], answers: list[str],
     }
     dataset = Dataset.from_dict(data)
 
-    # 2. Run evaluation
-    # Note: Explicitly setting LLM and Embeddings to avoid AttributeError in some environments
-    result = evaluate(
-        dataset,
-        metrics=[faithfulness, answer_relevancy, context_precision, context_recall]
-    )
+    # 2. Run evaluation with custom embeddings
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        class RAGASEmbeddings:
+            def __init__(self, model_name="BAAI/bge-small-en-v1.5"):
+                self.model = SentenceTransformer(model_name)
+
+            def embed_query(self, query: str) -> list:
+                return self.model.encode(query).tolist()
+
+            def embed_documents(self, docs: list[str]) -> list[list]:
+                return self.model.encode(docs).tolist()
+
+        embeddings = RAGASEmbeddings()
+
+        result = evaluate(
+            dataset,
+            metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
+            embeddings=embeddings
+        )
+    except Exception as e:
+        if "api_key" in str(e).lower() or "openai" in str(e).lower():
+            print(f"  ⚠ RAGAS evaluation skipped (missing OpenAI API key)")
+            return {
+                "faithfulness": 0.0,
+                "answer_relevancy": 0.0,
+                "context_precision": 0.0,
+                "context_recall": 0.0,
+                "per_question": []
+            }
+        raise
 
     # 3. Process results
     df = result.to_pandas()
     per_question = []
     for _, row in df.iterrows():
-        # Ragas v0.2+ uses new column names: user_input, response, retrieved_contexts, reference
         per_question.append(EvalResult(
             question=row.get("user_input", row.get("question", "")),
             answer=row.get("response", row.get("answer", "")),
