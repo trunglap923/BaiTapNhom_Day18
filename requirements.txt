@@ -1,0 +1,14 @@
+qdrant-client
+sentence-transformers
+underthesea
+rank_bm25
+ragas
+datasets
+openai
+python-dotenv
+flashrank
+pytest
+numpy
+pandas
+tqdm
+cohere

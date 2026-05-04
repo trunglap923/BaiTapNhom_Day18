@@ -1,3 +1,4 @@
 [
-  {"question": "hihi cả nhà tự tạo testset bằng cơm nhé", "ground_truth": "Không kịp tạo luôn"},
+  {"question": "Số ngày nghỉ phép năm của nhân viên là bao nhiêu?", "ground_truth": "12 ngày đối với điều kiện làm việc bình thường."},
+  {"question": "Làm thế nào để kết nối VPN công ty?", "ground_truth": "Cài đặt phần mềm FortiClient và sử dụng gateway vpn.company.com cùng OTP."}
 ]
