@@ -6,7 +6,7 @@ Làm giàu chunks TRƯỚC khi embed: Summarize, HyQA, Contextual Prepend, Auto 
 Test: pytest tests/test_m5.py
 """
 
-import os, sys
+import os, sys, asyncio
 from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,7 +27,7 @@ class EnrichedChunk:
 # ─── Technique 1: Chunk Summarization ────────────────────
 
 
-def summarize_chunk(text: str) -> str:
+async def summarize_chunk(text: str) -> str:
     """
     Tạo summary ngắn cho chunk.
     Embed summary thay vì (hoặc cùng với) raw chunk → giảm noise.
@@ -43,9 +43,9 @@ def summarize_chunk(text: str) -> str:
         return ". ".join(sentences[:2]) + "." if len(sentences) > 1 else text
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        resp = client.chat.completions.create(
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Tóm tắt đoạn văn sau trong 2-3 câu ngắn gọn bằng tiếng Việt."},
@@ -62,7 +62,7 @@ def summarize_chunk(text: str) -> str:
 # ─── Technique 2: Hypothesis Question-Answer (HyQA) ─────
 
 
-def generate_hypothesis_questions(text: str, n_questions: int = 3) -> list[str]:
+async def generate_hypothesis_questions(text: str, n_questions: int = 3) -> list[str]:
     """
     Generate câu hỏi mà chunk có thể trả lời.
     Index cả questions lẫn chunk → query match tốt hơn (bridge vocabulary gap).
@@ -78,9 +78,9 @@ def generate_hypothesis_questions(text: str, n_questions: int = 3) -> list[str]:
         return []
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        resp = client.chat.completions.create(
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": f"Dựa trên đoạn văn, tạo {n_questions} câu hỏi mà đoạn văn có thể trả lời. Trả về mỗi câu hỏi trên 1 dòng."},
@@ -98,7 +98,7 @@ def generate_hypothesis_questions(text: str, n_questions: int = 3) -> list[str]:
 # ─── Technique 3: Contextual Prepend (Anthropic style) ──
 
 
-def contextual_prepend(text: str, document_title: str = "") -> str:
+async def contextual_prepend(text: str, document_title: str = "") -> str:
     """
     Prepend context giải thích chunk nằm ở đâu trong document.
     Anthropic benchmark: giảm 49% retrieval failure (alone).
@@ -114,9 +114,9 @@ def contextual_prepend(text: str, document_title: str = "") -> str:
         return text
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        resp = client.chat.completions.create(
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Viết 1 câu ngắn mô tả đoạn văn này nằm ở đâu trong tài liệu và nói về chủ đề gì. Chỉ trả về 1 câu."},
@@ -134,7 +134,7 @@ def contextual_prepend(text: str, document_title: str = "") -> str:
 # ─── Technique 4: Auto Metadata Extraction ──────────────
 
 
-def extract_metadata(text: str) -> dict:
+async def extract_metadata(text: str) -> dict:
     """
     LLM extract metadata tự động: topic, entities, date_range, category.
 
@@ -149,9 +149,9 @@ def extract_metadata(text: str) -> dict:
 
     try:
         import json
-        from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        resp = client.chat.completions.create(
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": 'Trích xuất metadata từ đoạn văn. Trả về định dạng JSON duy nhất với các field: {"topic": "...", "entities": ["..."], "category": "policy|hr|it|finance", "language": "vi|en"}'},
@@ -166,20 +166,66 @@ def extract_metadata(text: str) -> dict:
         return {}
 
 
-# ─── Full Enrichment Pipeline ────────────────────────────
+# ─── Full Enrichment Pipeline (Async/Parallel) ─────────
 
 
-def enrich_chunks(
+async def enrich_single_chunk(
+    chunk: dict,
+    methods: list[str],
+    semaphore: asyncio.Semaphore,
+) -> EnrichedChunk:
+    """Enrich single chunk with all techniques in parallel."""
+    async with semaphore:
+        text = chunk["text"]
+        meta = chunk["metadata"]
+
+        tasks = []
+
+        if "summary" in methods or "full" in methods:
+            tasks.append(summarize_chunk(text))
+        else:
+            tasks.append(asyncio.sleep(0, ""))
+
+        if "hyqa" in methods or "full" in methods:
+            tasks.append(generate_hypothesis_questions(text))
+        else:
+            tasks.append(asyncio.sleep(0, []))
+
+        if "contextual" in methods or "full" in methods:
+            tasks.append(contextual_prepend(text, meta.get("source", "")))
+        else:
+            tasks.append(asyncio.sleep(0, text))
+
+        if "metadata" in methods or "full" in methods:
+            tasks.append(extract_metadata(text))
+        else:
+            tasks.append(asyncio.sleep(0, {}))
+
+        summary, questions, enriched_text, auto_meta = await asyncio.gather(*tasks)
+
+        return EnrichedChunk(
+            original_text=text,
+            enriched_text=enriched_text,
+            summary=summary,
+            hypothesis_questions=questions,
+            auto_metadata={**meta, **auto_meta},
+            method="+".join(methods),
+        )
+
+
+async def enrich_chunks_async(
     chunks: list[dict],
     methods: list[str] | None = None,
+    max_concurrent: int = 5,
 ) -> list[EnrichedChunk]:
     """
-    Chạy enrichment pipeline trên danh sách chunks.
+    Async enrichment with parallel requests.
+    max_concurrent: Limit concurrent API calls to avoid rate limiting (default 5).
 
     Args:
         chunks: List of {"text": str, "metadata": dict}
         methods: List of methods to apply. Default: ["contextual", "hyqa", "metadata"]
-                 Options: "summary", "hyqa", "contextual", "metadata", "full"
+        max_concurrent: Max concurrent chunks being processed
 
     Returns:
         List of EnrichedChunk objects.
@@ -187,39 +233,79 @@ def enrich_chunks(
     if methods is None:
         methods = ["contextual", "hyqa", "metadata"]
 
-    enriched_list = []
-    from tqdm import tqdm
+    semaphore = asyncio.Semaphore(max_concurrent)
 
-    for chunk in tqdm(chunks, desc="Enriching chunks"):
-        text = chunk["text"]
-        meta = chunk["metadata"]
-        
-        summary = ""
-        if "summary" in methods or "full" in methods:
-            summary = summarize_chunk(text)
-            
-        questions = []
-        if "hyqa" in methods or "full" in methods:
-            questions = generate_hypothesis_questions(text)
-            
-        enriched_text = text
-        if "contextual" in methods or "full" in methods:
-            enriched_text = contextual_prepend(text, meta.get("source", ""))
-            
-        auto_meta = {}
-        if "metadata" in methods or "full" in methods:
-            auto_meta = extract_metadata(text)
-            
-        enriched_list.append(EnrichedChunk(
-            original_text=text,
-            enriched_text=enriched_text,
-            summary=summary,
-            hypothesis_questions=questions,
-            auto_metadata={**meta, **auto_meta},
-            method="+".join(methods),
-        ))
+    try:
+        from tqdm.asyncio import tqdm
+        tasks = [enrich_single_chunk(chunk, methods, semaphore) for chunk in chunks]
+        enriched_list = await tqdm.gather(*tasks, desc="Enriching chunks")
+    except ImportError:
+        tasks = [enrich_single_chunk(chunk, methods, semaphore) for chunk in chunks]
+        enriched_list = await asyncio.gather(*tasks)
 
     return enriched_list
+
+
+def enrich_chunks(
+    chunks: list[dict],
+    methods: list[str] | None = None,
+    use_async: bool = True,
+) -> list[EnrichedChunk]:
+    """
+    Chạy enrichment pipeline trên danh sách chunks.
+    Default: async with parallelization. Fallback to sync if needed.
+
+    Args:
+        chunks: List of {"text": str, "metadata": dict}
+        methods: List of methods to apply. Default: ["contextual", "hyqa", "metadata"]
+        use_async: Use async/parallel (default True)
+
+    Returns:
+        List of EnrichedChunk objects.
+    """
+    if methods is None:
+        methods = ["contextual", "hyqa", "metadata"]
+
+    if use_async:
+        try:
+            return asyncio.run(enrich_chunks_async(chunks, methods))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(enrich_chunks_async(chunks, methods))
+    else:
+        enriched_list = []
+        from tqdm import tqdm
+        for chunk in tqdm(chunks, desc="Enriching chunks"):
+            text = chunk["text"]
+            meta = chunk["metadata"]
+
+            summary = ""
+            if "summary" in methods or "full" in methods:
+                summary = asyncio.run(summarize_chunk(text))
+
+            questions = []
+            if "hyqa" in methods or "full" in methods:
+                questions = asyncio.run(generate_hypothesis_questions(text))
+
+            enriched_text = text
+            if "contextual" in methods or "full" in methods:
+                enriched_text = asyncio.run(contextual_prepend(text, meta.get("source", "")))
+
+            auto_meta = {}
+            if "metadata" in methods or "full" in methods:
+                auto_meta = asyncio.run(extract_metadata(text))
+
+            enriched_list.append(EnrichedChunk(
+                original_text=text,
+                enriched_text=enriched_text,
+                summary=summary,
+                hypothesis_questions=questions,
+                auto_metadata={**meta, **auto_meta},
+                method="+".join(methods),
+            ))
+
+        return enriched_list
 
 
 # ─── Main ────────────────────────────────────────────────
@@ -230,14 +316,14 @@ if __name__ == "__main__":
     print("=== Enrichment Pipeline Demo ===\n")
     print(f"Original: {sample}\n")
 
-    s = summarize_chunk(sample)
+    s = asyncio.run(summarize_chunk(sample))
     print(f"Summary: {s}\n")
 
-    qs = generate_hypothesis_questions(sample)
+    qs = asyncio.run(generate_hypothesis_questions(sample))
     print(f"HyQA questions: {qs}\n")
 
-    ctx = contextual_prepend(sample, "Sổ tay nhân viên VinUni 2024")
+    ctx = asyncio.run(contextual_prepend(sample, "Sổ tay nhân viên VinUni 2024"))
     print(f"Contextual: {ctx}\n")
 
-    meta = extract_metadata(sample)
+    meta = asyncio.run(extract_metadata(sample))
     print(f"Auto metadata: {meta}")

@@ -1,0 +1,25 @@
+{
+  "aggregate": {
+    "faithfulness": 1.0,
+    "answer_relevancy": 1.0,
+    "context_precision": 0.9999999999,
+    "context_recall": 1.0
+  },
+  "num_questions": 2,
+  "failures": [
+    {
+      "question": "Làm thế nào để kết nối VPN công ty?",
+      "worst_metric": "answer_relevancy",
+      "score": 0.7057,
+      "diagnosis": "Answer is correct but doesn't directly address the user query",
+      "suggested_fix": "Improve prompt template to focus on the specific question."
+    },
+    {
+      "question": "Số ngày nghỉ phép năm của nhân viên là bao nhiêu?",
+      "worst_metric": "context_precision",
+      "score": 1.0,
+      "diagnosis": "Unknown error",
+      "suggested_fix": "Check logs"
+    }
+  ]
+}
